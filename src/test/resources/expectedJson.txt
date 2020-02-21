@@ -1,0 +1,15 @@
+{"name":"Pony Ma"
+,"stuNo":"20170123"
+,"hobbies":["Basketball","Swimming"]
+,"schools":[
+{"schoolName":"Sichuan University",
+"buildings":[
+{"buildingName":"No.1 teaching building"}
+,{"buildingName":"No.2 teaching building"}]
+}
+,{"schoolName":"Beijing University"
+,"buildings":[
+{"buildingName":"No.1 teaching building"}
+,{"buildingName":"No.2 teaching building"}]
+}]
+}
