@@ -2,28 +2,32 @@ package json;
 
 import lombok.Getter;
 
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 
 /**
  * @author ShaoJiale
  * Date: 2020/2/20
  */
 @Getter
-public class JsonObject<T> {
-    private Class<?> targetClass;
-
-    private Constructor<?>[] constructors;
-
-    private Method[] methods;
-
-    private Field[] fields;
-
-    public JsonObject(T object) {
-        this.targetClass = object.getClass();
-        this.constructors = targetClass.getConstructors();
-        this.methods = targetClass.getMethods();
-        this.fields = targetClass.getDeclaredFields();
+public class JsonObject<K, V> extends HashMap<K, V> {
+    public List<Entry<K, V>> getEntries() {
+        return new ArrayList<>(this.entrySet());
     }
+
+    public JsonObject<?, ?> getJsonObject(K key) {
+        if (!this.containsKey(key)) {
+            throw new IllegalArgumentException("Invalid key: '" + key + "'");
+        }
+
+        V value = this.get(key);
+        if (value instanceof JsonObject) {
+            return (JsonObject<?, ?>) value;
+        }
+
+        throw new RuntimeException("Value is not a JsonObject");
+    }
+
+
 }

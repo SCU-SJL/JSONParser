@@ -29,10 +29,10 @@ public interface JsonParser {
     String parseToJsonString(Object bean) throws JsonParseException;
 
     /**
-     * Get the {@link JsonObject} corresponding to the given bean.
+     * Get the {@link JsonObject} corresponding to the given json.
      *
-     * @param bean target bean
-     * @return {@link JsonObject} corresponding to the given bean
+     * @param jsonStr JSONString
+     * @return {@link JsonObject} corresponding to the given json
      */
-    JsonObject<?> parseToJsonObject(Object bean);
+    JsonObject<?, ?> parseToJsonObject(String jsonStr) throws JsonParseException;
 }
