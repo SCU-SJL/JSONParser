@@ -8,9 +8,12 @@ import json.token.Token;
 import json.token.TokenList;
 import json.token.TokenType;
 import json.token.Tokenizer;
+import json.util.Assert;
 import json.util.CharReader;
 
+import java.lang.reflect.Array;
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.util.*;
 
 /**
@@ -31,16 +34,18 @@ public class DefaultJsonParser implements JsonParser {
     private static final int SEP_COLON_TOKEN = 256;
     private static final int SEP_COMMA_TOKEN = 512;
 
-    private CharReader charReader;
     private Tokenizer tokenizer = new Tokenizer();
     private TokenList tokens;
 
     public final static Set<Class<?>> REGULAR_TYPE;
-    public final static Set<Class<?>> ARRAY_TYPE;
+    public final static Set<Class<?>> PRIMITIVE_ARRAY_TYPE;
+    public final static Set<Class<?>> PACKAGING_ARRAY_TYPE;
 
     static {
         REGULAR_TYPE = new HashSet<>();
-        ARRAY_TYPE = new HashSet<>();
+        PRIMITIVE_ARRAY_TYPE = new HashSet<>();
+        PACKAGING_ARRAY_TYPE = new HashSet<>();
+
         REGULAR_TYPE.add(byte.class);
         REGULAR_TYPE.add(boolean.class);
         REGULAR_TYPE.add(short.class);
@@ -58,15 +63,25 @@ public class DefaultJsonParser implements JsonParser {
         REGULAR_TYPE.add(Long.class);
         REGULAR_TYPE.add(Double.class);
         REGULAR_TYPE.add(String.class);
-        ARRAY_TYPE.add(byte[].class);
-        ARRAY_TYPE.add(boolean[].class);
-        ARRAY_TYPE.add(short[].class);
-        ARRAY_TYPE.add(char[].class);
-        ARRAY_TYPE.add(int[].class);
-        ARRAY_TYPE.add(float[].class);
-        ARRAY_TYPE.add(long[].class);
-        ARRAY_TYPE.add(double[].class);
-        ARRAY_TYPE.add(String[].class);
+
+        PRIMITIVE_ARRAY_TYPE.add(byte[].class);
+        PRIMITIVE_ARRAY_TYPE.add(boolean[].class);
+        PRIMITIVE_ARRAY_TYPE.add(short[].class);
+        PRIMITIVE_ARRAY_TYPE.add(char[].class);
+        PRIMITIVE_ARRAY_TYPE.add(int[].class);
+        PRIMITIVE_ARRAY_TYPE.add(float[].class);
+        PRIMITIVE_ARRAY_TYPE.add(long[].class);
+        PRIMITIVE_ARRAY_TYPE.add(double[].class);
+
+        PACKAGING_ARRAY_TYPE.add(Byte[].class);
+        PACKAGING_ARRAY_TYPE.add(Boolean[].class);
+        PACKAGING_ARRAY_TYPE.add(Short[].class);
+        PACKAGING_ARRAY_TYPE.add(Character[].class);
+        PACKAGING_ARRAY_TYPE.add(Integer[].class);
+        PACKAGING_ARRAY_TYPE.add(Float[].class);
+        PACKAGING_ARRAY_TYPE.add(Long[].class);
+        PACKAGING_ARRAY_TYPE.add(Double[].class);
+        PACKAGING_ARRAY_TYPE.add(String[].class);
     }
 
     @Override
@@ -115,13 +130,175 @@ public class DefaultJsonParser implements JsonParser {
     }
 
     @Override
-    public Object parseToObject(String jsonStr, Class<?> targetClass) {
-        return null;
+    public Object parseToObject(String jsonStr, Class<?> targetClass) throws JsonParseException {
+        Object targetObject;
+        try {
+            targetObject = targetClass.getDeclaredConstructor().newInstance();
+            targetClass.cast(targetObject);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+
+        JsonObject<String, Object> jsonObject = this.parseToJsonObject(jsonStr);
+        return doParseToObject(jsonObject, targetObject, targetClass);
+    }
+
+    private Object doParseToObject(JsonObject<String, Object> jsonObject, Object targetObject, Class<?> targetClass) throws JsonParseException {
+        Field[] fields = targetClass.getDeclaredFields();
+
+        for (Map.Entry<String, Object> entry : jsonObject.entrySet()) {
+            String key = entry.getKey();
+            Object value = entry.getValue();
+            Field targetField = null;
+            Class<?> valueClass = value.getClass();
+            Class<?> fieldClass = null;
+            for (Field field : fields) {
+                if (field.getName().equals(key)) {
+                    targetField = field;
+                    fieldClass = targetField.getType();
+                    break;
+                }
+            }
+
+            if (REGULAR_TYPE.contains(valueClass)) {
+                Assert.assertFieldNotNull(targetField, key);
+                targetField.setAccessible(true);
+                try {
+//                    valueClass.cast(value);
+                    targetField.set(targetObject, value);
+                } catch (IllegalAccessException e) {
+                    throw new JsonParseException("Set value to field: '" + targetField + "' failed");
+                }
+            } else if (valueClass.equals(JsonArray.class)) {
+                JsonArray<?> jsonArray = (JsonArray<?>) value;
+                if (PRIMITIVE_ARRAY_TYPE.contains(fieldClass)) {
+                    Assert.assertFieldNotNull(targetField, key);
+                    Assert.assertTypeMatches(valueClass, JsonArray.class);
+                    targetField.setAccessible(true);
+
+                    try {
+                        if (fieldClass.equals(int[].class)) {
+                            int[] arr = new int[jsonArray.size()];
+                            for (int i = 0; i < arr.length; i++) {
+                                arr[i] = (Integer) jsonArray.get(i);
+                            }
+                            targetField.set(targetObject, arr);
+                        } else if (fieldClass.equals(short[].class)) {
+                            short[] arr = new short[jsonArray.size()];
+                            for (int i = 0; i < arr.length; i++) {
+                                arr[i] = (Short) jsonArray.get(i);
+                            }
+                            targetField.set(targetObject, arr);
+                        } else if (fieldClass.equals(byte[].class)) {
+                            byte[] arr = new byte[jsonArray.size()];
+                            for (int i = 0; i < arr.length; i++) {
+                                arr[i] = Byte.parseByte(jsonArray.get(i).toString());
+                            }
+                            targetField.set(targetObject, arr);
+                        } else if (fieldClass.equals(char[].class)) {
+                            char[] arr = new char[jsonArray.size()];
+                            for (int i = 0; i < arr.length; i++) {
+                                arr[i] = (Character) jsonArray.get(i);
+                            }
+                            targetField.set(targetObject, arr);
+                        } else if (fieldClass.equals(boolean[].class)) {
+                            boolean[] arr = new boolean[jsonArray.size()];
+                            for (int i = 0; i < arr.length; i++) {
+                                arr[i] = (Boolean) jsonArray.get(i);
+                            }
+                            targetField.set(targetObject, arr);
+                        } else if (fieldClass.equals(double[].class)) {
+                            double[] arr = new double[jsonArray.size()];
+                            for (int i = 0; i < arr.length; i++) {
+                                arr[i] = (Double) jsonArray.get(i);
+                            }
+                            targetField.set(targetObject, arr);
+                        } else if (fieldClass.equals(float[].class)) {
+                            float[] arr = new float[jsonArray.size()];
+                            for (int i = 0; i < arr.length; i++) {
+                                arr[i] = (Float) jsonArray.get(i);
+                            }
+                            targetField.set(targetObject, arr);
+                        } else if (fieldClass.equals(long[].class)) {
+                            long[] arr = new long[jsonArray.size()];
+                            for (int i = 0; i < arr.length; i++) {
+                                arr[i] = Long.parseLong(jsonArray.get(i).toString());
+                            }
+                            targetField.set(targetObject, arr);
+                        }
+                    } catch (IllegalAccessException e) {
+                        throw new JsonParseException("Set value to field: '" + targetField + "' failed");
+                    }
+                } else if (PACKAGING_ARRAY_TYPE.contains(fieldClass)) {
+                    Assert.assertFieldNotNull(targetField, key);
+                    Assert.assertTypeMatches(valueClass, JsonArray.class);
+                    targetField.setAccessible(true);
+                    try {
+                        if (fieldClass.equals(Integer[].class)) {
+                            targetField.set(targetObject, jsonArray.toArray(new Integer[0]));
+                        } else if (fieldClass.equals(Double[].class)) {
+                            targetField.set(targetObject, jsonArray.toArray(new Double[0]));
+                        } else if (fieldClass.equals(Float[].class)) {
+                            targetField.set(targetObject, jsonArray.toArray(new Float[0]));
+                        } else if (fieldClass.equals(Short[].class)) {
+                            targetField.set(targetObject, jsonArray.toArray(new Short[0]));
+                        } else if (fieldClass.equals(Boolean[].class)) {
+                            targetField.set(targetObject, jsonArray.toArray(new Boolean[0]));
+                        } else if (fieldClass.equals(Character[].class)) {
+                            targetField.set(targetObject, jsonArray.toArray(new Character[0]));
+                        } else if (fieldClass.equals(Long[].class)) {
+                            Long[] longs = new Long[jsonArray.size()];
+                            for (int i = 0; i < longs.length; i++) {
+                                longs[i] = Long.valueOf(jsonArray.get(i).toString());
+                            }
+                            targetField.set(targetObject, longs);
+                        } else if (fieldClass.equals(Byte[].class)) {
+                            targetField.set(targetObject, jsonArray.toArray(new Byte[0]));
+                        }
+                    } catch (IllegalAccessException e) {
+                        throw new JsonParseException("Set value to field: '" + targetField + "' failed");
+                    }
+                } else { // array of bean
+                    targetField.setAccessible(true);
+                    try {
+//                        targetField.set(targetObject, Array.newInstance(targetField.getType(), jsonArray.size()));
+                        Object[] arr = new Object[jsonArray.size()];
+                        for (int i = 0; i < arr.length; i++) {
+                            JsonObject<String, Object> elemJsonObject = (JsonObject<String, Object>) jsonArray.get(i);
+                            Object elemObject = fieldClass.getComponentType().getDeclaredConstructor().newInstance();
+                            arr[i] = doParseToObject(elemJsonObject, elemObject, fieldClass.getComponentType());
+                        }
+                        targetField.set(targetObject, arr);
+                    } catch (Exception e) {
+                        throw new JsonParseException("Set value to field: '" + targetField + "' failed");
+                    }
+                }
+            } else if (valueClass.equals(JsonObject.class)) {
+                assert targetField != null;
+                targetField.setAccessible(true);
+                Object fieldObject = null;
+                try {
+                    assert fieldClass != null;
+                    fieldObject = fieldClass.getDeclaredConstructor().newInstance();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    return null;
+                }
+                try {
+                    targetField.set(targetObject, doParseToObject((JsonObject<String, Object>) value, fieldObject , fieldClass));
+                } catch (IllegalAccessException e) {
+                    throw new JsonParseException("Set value to field: '" + targetField + "' failed");
+                }
+            }
+        }
+
+        return targetObject;
     }
 
     @Override
     public JsonObject<String, Object> parseToJsonObject(String jsonStr) throws JsonParseException {
-        this.charReader = new CharReader(jsonStr);
+        CharReader charReader = new CharReader(jsonStr);
         this.tokens = this.tokenizer.getTokenList(charReader);
 
         Token token = tokens.next();
@@ -134,7 +311,13 @@ public class DefaultJsonParser implements JsonParser {
         }
     }
 
-    private JsonObject<String, Object> doParseToJsonObject() throws JsonParseException{
+    /**
+     * Parse tokens into JsonObject
+     *
+     * @return JsonObject
+     * @throws JsonParseException when token is invalid or illegal
+     */
+    private JsonObject<String, Object> doParseToJsonObject() throws JsonParseException {
         JsonObject<String, Object> jsonObject = new JsonObject<>();
 
         int expectedToken = STRING_TOKEN | END_OBJECT_TOKEN | NUMBER_TOKEN;
@@ -180,7 +363,7 @@ public class DefaultJsonParser implements JsonParser {
                                 jsonObject.put(key, (int) num);
                             }
                         }
-                        expectedToken= SEP_COMMA_TOKEN | END_OBJECT_TOKEN | SEP_COLON_TOKEN;
+                        expectedToken = SEP_COMMA_TOKEN | END_OBJECT_TOKEN | SEP_COLON_TOKEN;
                     } else {
                         key = token.getValue();
                         expectedToken = SEP_COLON_TOKEN;
@@ -220,6 +403,12 @@ public class DefaultJsonParser implements JsonParser {
         throw new JsonParseException("Parse to JsonObject failed, invalid token");
     }
 
+    /**
+     * Parse the tokens into JsonArray
+     *
+     * @return JsonArray
+     * @throws JsonParseException when token is invalid or illegal
+     */
     private JsonArray<Object> parseToJsonArray() throws JsonParseException {
         int expectedToken = BEGIN_ARRAY_TOKEN | END_ARRAY_TOKEN | BEGIN_OBJECT_TOKEN
                 | NULL_TOKEN | NUMBER_TOKEN | BOOLEAN_TOKEN | STRING_TOKEN;
@@ -287,6 +476,13 @@ public class DefaultJsonParser implements JsonParser {
         throw new JsonParseException("Parse to JsonArray failed, invalid token");
     }
 
+    /**
+     * check if the current token is the expected token.
+     *
+     * @param tokenType     current token
+     * @param expectedToken expected token
+     * @throws JsonParseException when the current token is not the expected token
+     */
     private void checkExpectedToken(TokenType tokenType, int expectedToken) throws JsonParseException {
         if ((tokenType.getTokenCode() & expectedToken) == 0) {
             throw new JsonParseException("Parse error, invalid Token.");
@@ -312,18 +508,97 @@ public class DefaultJsonParser implements JsonParser {
             }
         } else if (fieldClass.isArray()) {  // if the current field is an array
             result.append("[");
-            Object[] array = (Object[]) value;
-            if (ARRAY_TYPE.contains(fieldClass)) {
+            Object[] array = null;
+
+            if (!PRIMITIVE_ARRAY_TYPE.contains(fieldClass)) {
+                array = (Object[]) value;
+            }
+
+            if (PRIMITIVE_ARRAY_TYPE.contains(fieldClass) || PACKAGING_ARRAY_TYPE.contains(fieldClass)) {
                 if (String[].class.equals(fieldClass)) {
-                    for (int j = 0; j < array.length; j++) {
+                    String[] arr = (String[]) value;
+                    for (int j = 0; j < arr.length; j++) {
                         result.append("\"")
-                                .append(array[j])
+                                .append(arr[j])
                                 .append("\"");
-                        if (j < array.length - 1) {
+                        if (j < arr.length - 1) {
                             result.append(",");
                         }
                     }
-                } else {
+                } else if (int[].class.equals(fieldClass)) {
+                    assert value instanceof int[];
+                    int[] arr = (int[]) value;
+                    for (int j = 0; j < arr.length; j++) {
+                        result.append(arr[j]);
+                        if (j < arr.length - 1) {
+                            result.append(",");
+                        }
+                    }
+                } else if (double[].class.equals(fieldClass)) {
+                    assert value instanceof double[];
+                    double[] arr = (double[]) value;
+                    for (int j = 0; j < arr.length; j++) {
+                        result.append(arr[j]);
+                        if (j < arr.length - 1) {
+                            result.append(",");
+                        }
+                    }
+                } else if (float[].class.equals(fieldClass)) {
+                    assert value instanceof float[];
+                    float[] arr = (float[]) value;
+                    for (int j = 0; j < arr.length; j++) {
+                        result.append(arr[j]);
+                        if (j < arr.length - 1) {
+                            result.append(",");
+                        }
+                    }
+                } else if (boolean[].class.equals(fieldClass)) {
+                    assert value instanceof boolean[];
+                    boolean[] arr = (boolean[]) value;
+                    for (int j = 0; j < arr.length; j++) {
+                        result.append(arr[j]);
+                        if (j < arr.length - 1) {
+                            result.append(",");
+                        }
+                    }
+                } else if (char[].class.equals(fieldClass)) {
+                    assert value instanceof char[];
+                    char[] arr = (char[]) value;
+                    for (int j = 0; j < arr.length; j++) {
+                        result.append(arr[j]);
+                        if (j < arr.length - 1) {
+                            result.append(",");
+                        }
+                    }
+                } else if (byte[].class.equals(fieldClass)) {
+                    assert value instanceof byte[];
+                    byte[] arr = (byte[]) value;
+                    for (int j = 0; j < arr.length; j++) {
+                        result.append(arr[j]);
+                        if (j < arr.length - 1) {
+                            result.append(",");
+                        }
+                    }
+                } else if (short[].class.equals(fieldClass)) {
+                    assert value instanceof short[];
+                    short[] arr = (short[]) value;
+                    for (int j = 0; j < arr.length; j++) {
+                        result.append(arr[j]);
+                        if (j < arr.length - 1) {
+                            result.append(",");
+                        }
+                    }
+                } else if (long[].class.equals(fieldClass)) {
+                    assert value instanceof long[];
+                    long[] arr = (long[]) value;
+                    for (int j = 0; j < arr.length; j++) {
+                        result.append(arr[j]);
+                        if (j < arr.length - 1) {
+                            result.append(",");
+                        }
+                    }
+                } else {    // packaging class
+                    assert array != null;
                     for (int j = 0; j < array.length; j++) {
                         result.append(array[j]);
                         if (j < array.length - 1) {
@@ -332,6 +607,7 @@ public class DefaultJsonParser implements JsonParser {
                     }
                 }
             } else {    // if it's an array of beans
+                assert array != null;
                 for (int j = 0; j < array.length; j++) {
                     result.append(parseToJsonString(array[j]));
                     if (j < array.length - 1) {
@@ -340,6 +616,7 @@ public class DefaultJsonParser implements JsonParser {
                 }
             }
             result.append("]");
+
         } else if (List.class.isAssignableFrom(fieldClass)) {
             result.append("[");
             List<?> list = (List<?>) value;

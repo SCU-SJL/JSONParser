@@ -16,7 +16,7 @@ public interface JsonParser {
      * @param targetClass Class of target bean
      * @return target bean
      */
-    Object parseToObject(String jsonStr, Class<?> targetClass);
+    Object parseToObject(String jsonStr, Class<?> targetClass) throws JsonParseException;
 
     /**
      * Convert bean into JSONString.

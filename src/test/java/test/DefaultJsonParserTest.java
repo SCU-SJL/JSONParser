@@ -24,12 +24,12 @@ public class DefaultJsonParserTest {
     @Before
     public void init() {
         School scu = new School("Sichuan University", new Building[]{
-                new Building("No.1 Teaching Building"),
-                new Building("No.2 Teaching Building")
+                new Building(1, "No.1 Teaching Building"),
+                new Building(2, "No.2 Teaching Building")
         });
         School bju = new School("Beijing University", new Building[]{
-                new Building("No.1 Teaching Building"),
-                new Building("No.2 Teaching Building")
+                new Building(1, "No.1 Teaching Building"),
+                new Building(2, "No.2 Teaching Building")
         });
         String[] hobbies = {"Basketball", "Swimming"};
         List<School> schools = Arrays.asList(scu, bju);

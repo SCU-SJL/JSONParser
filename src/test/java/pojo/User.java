@@ -4,8 +4,7 @@ import lombok.*;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
-@Setter(value = AccessLevel.PUBLIC)
-@Getter(value = AccessLevel.PUBLIC)
+@Data
 @ToString(of = {"id", "name", "age"})
 @AllArgsConstructor
 public class User {
