@@ -5,15 +5,11 @@ import json.JsonObject;
 import json.JsonParser;
 import json.exception.JsonParseException;
 import json.token.Token;
-import json.token.TokenList;
 import json.token.TokenType;
-import json.token.Tokenizer;
 import json.util.Assert;
 import json.util.CharReader;
 
-import java.lang.reflect.Array;
-import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.*;
 import java.util.*;
 
 /**
@@ -22,67 +18,7 @@ import java.util.*;
  * @author ShaoJiale
  * Date: 2020/2/20
  */
-public class DefaultJsonParser implements JsonParser {
-    private static final int BEGIN_OBJECT_TOKEN = 1;
-    private static final int END_OBJECT_TOKEN = 2;
-    private static final int BEGIN_ARRAY_TOKEN = 4;
-    private static final int END_ARRAY_TOKEN = 8;
-    private static final int NULL_TOKEN = 16;
-    private static final int NUMBER_TOKEN = 32;
-    private static final int STRING_TOKEN = 64;
-    private static final int BOOLEAN_TOKEN = 128;
-    private static final int SEP_COLON_TOKEN = 256;
-    private static final int SEP_COMMA_TOKEN = 512;
-
-    private Tokenizer tokenizer = new Tokenizer();
-    private TokenList tokens;
-
-    public final static Set<Class<?>> REGULAR_TYPE;
-    public final static Set<Class<?>> PRIMITIVE_ARRAY_TYPE;
-    public final static Set<Class<?>> PACKAGING_ARRAY_TYPE;
-
-    static {
-        REGULAR_TYPE = new HashSet<>();
-        PRIMITIVE_ARRAY_TYPE = new HashSet<>();
-        PACKAGING_ARRAY_TYPE = new HashSet<>();
-
-        REGULAR_TYPE.add(byte.class);
-        REGULAR_TYPE.add(boolean.class);
-        REGULAR_TYPE.add(short.class);
-        REGULAR_TYPE.add(char.class);
-        REGULAR_TYPE.add(int.class);
-        REGULAR_TYPE.add(float.class);
-        REGULAR_TYPE.add(long.class);
-        REGULAR_TYPE.add(double.class);
-        REGULAR_TYPE.add(Byte.class);
-        REGULAR_TYPE.add(Boolean.class);
-        REGULAR_TYPE.add(Short.class);
-        REGULAR_TYPE.add(Character.class);
-        REGULAR_TYPE.add(Integer.class);
-        REGULAR_TYPE.add(Float.class);
-        REGULAR_TYPE.add(Long.class);
-        REGULAR_TYPE.add(Double.class);
-        REGULAR_TYPE.add(String.class);
-
-        PRIMITIVE_ARRAY_TYPE.add(byte[].class);
-        PRIMITIVE_ARRAY_TYPE.add(boolean[].class);
-        PRIMITIVE_ARRAY_TYPE.add(short[].class);
-        PRIMITIVE_ARRAY_TYPE.add(char[].class);
-        PRIMITIVE_ARRAY_TYPE.add(int[].class);
-        PRIMITIVE_ARRAY_TYPE.add(float[].class);
-        PRIMITIVE_ARRAY_TYPE.add(long[].class);
-        PRIMITIVE_ARRAY_TYPE.add(double[].class);
-
-        PACKAGING_ARRAY_TYPE.add(Byte[].class);
-        PACKAGING_ARRAY_TYPE.add(Boolean[].class);
-        PACKAGING_ARRAY_TYPE.add(Short[].class);
-        PACKAGING_ARRAY_TYPE.add(Character[].class);
-        PACKAGING_ARRAY_TYPE.add(Integer[].class);
-        PACKAGING_ARRAY_TYPE.add(Float[].class);
-        PACKAGING_ARRAY_TYPE.add(Long[].class);
-        PACKAGING_ARRAY_TYPE.add(Double[].class);
-        PACKAGING_ARRAY_TYPE.add(String[].class);
-    }
+public class DefaultJsonParser extends AbstractJsonParser {
 
     @Override
     public String parseToJsonString(Object bean) throws JsonParseException {
@@ -134,7 +70,6 @@ public class DefaultJsonParser implements JsonParser {
         Object targetObject;
         try {
             targetObject = targetClass.getDeclaredConstructor().newInstance();
-            targetClass.cast(targetObject);
         } catch (Exception e) {
             e.printStackTrace();
             return null;
@@ -165,7 +100,6 @@ public class DefaultJsonParser implements JsonParser {
                 Assert.assertFieldNotNull(targetField, key);
                 targetField.setAccessible(true);
                 try {
-//                    valueClass.cast(value);
                     targetField.set(targetObject, value);
                 } catch (IllegalAccessException e) {
                     throw new JsonParseException("Set value to field: '" + targetField + "' failed");
@@ -259,15 +193,50 @@ public class DefaultJsonParser implements JsonParser {
                     } catch (IllegalAccessException e) {
                         throw new JsonParseException("Set value to field: '" + targetField + "' failed");
                     }
+                } else if (COLLECTION_TYPE.contains(fieldClass)) {
+                    assert fieldClass != null;
+                    targetField.setAccessible(true);
+                    Class<?> parameterType = getParameterType(targetField);
+
+                    try {
+                        if (List.class.isAssignableFrom(fieldClass)) {
+                            List<Object> list = new ArrayList<>();
+                            if (REGULAR_TYPE.contains(parameterType)) {
+                                list.addAll(jsonArray);
+                            } else {
+                                for (Object o : jsonArray) {
+                                    JsonObject<String, Object> elemJsonObject = (JsonObject<String, Object>) o;
+                                    Object elemObject = parameterType.getDeclaredConstructor().newInstance();
+                                    list.add(doParseToObject(elemJsonObject, elemObject, parameterType));
+                                }
+                            }
+                            targetField.set(targetObject, list);
+                        } else if (Set.class.isAssignableFrom(fieldClass)) {
+                            Set<Object> set = new HashSet<>();
+                            if (REGULAR_TYPE.contains(parameterType)) {
+                                set.addAll(jsonArray);
+                            } else {
+                                for (Object o : jsonArray) {
+                                    JsonObject<String, Object> elemJsonObject = (JsonObject<String, Object>) o;
+                                    Object elemObject = parameterType.getDeclaredConstructor().newInstance();
+                                    set.add(doParseToObject(elemJsonObject, elemObject, parameterType));
+                                }
+                            }
+                            targetField.set(targetObject, set);
+                        }
+                    } catch (Exception e) {
+                        throw new JsonParseException("Set value to field: '" + targetField + "' failed");
+                    }
                 } else { // array of bean
+                    assert targetField != null;
                     targetField.setAccessible(true);
                     try {
-//                        targetField.set(targetObject, Array.newInstance(targetField.getType(), jsonArray.size()));
-                        Object[] arr = new Object[jsonArray.size()];
-                        for (int i = 0; i < arr.length; i++) {
+                        assert fieldClass != null;
+                        Object arr = Array.newInstance(fieldClass.getComponentType(), jsonArray.size());
+                        for (int i = 0; i < jsonArray.size(); i++) {
                             JsonObject<String, Object> elemJsonObject = (JsonObject<String, Object>) jsonArray.get(i);
                             Object elemObject = fieldClass.getComponentType().getDeclaredConstructor().newInstance();
-                            arr[i] = doParseToObject(elemJsonObject, elemObject, fieldClass.getComponentType());
+                            Array.set(arr, i, doParseToObject(elemJsonObject, elemObject, fieldClass.getComponentType()));
                         }
                         targetField.set(targetObject, arr);
                     } catch (Exception e) {
@@ -286,7 +255,7 @@ public class DefaultJsonParser implements JsonParser {
                     return null;
                 }
                 try {
-                    targetField.set(targetObject, doParseToObject((JsonObject<String, Object>) value, fieldObject , fieldClass));
+                    targetField.set(targetObject, doParseToObject((JsonObject<String, Object>) value, fieldObject, fieldClass));
                 } catch (IllegalAccessException e) {
                     throw new JsonParseException("Set value to field: '" + targetField + "' failed");
                 }
@@ -669,5 +638,20 @@ public class DefaultJsonParser implements JsonParser {
                 result.append(",");
             }
         }
+    }
+
+    /**
+     * Get class of parameters of a collection.
+     *
+     * @param field field of a collection
+     * @return class of parameters of the collection
+     */
+    private Class<?> getParameterType(Field field) {
+        Type type = field.getGenericType();
+        if (type instanceof ParameterizedType) {
+            ParameterizedType pt = (ParameterizedType) type;
+            return (Class<?>) pt.getActualTypeArguments()[0];
+        }
+        return null;
     }
 }
