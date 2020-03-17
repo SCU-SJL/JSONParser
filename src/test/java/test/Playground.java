@@ -1,6 +1,7 @@
 package test;
 
 import json.JsonArray;
+import json.JsonObject;
 import json.JsonParser;
 import json.exception.JsonParseException;
 import json.support.DefaultJsonParser;
@@ -13,43 +14,35 @@ import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 /**
  * @author ShaoJiale
  * Date: 2020/2/24
  */
 public class Playground {
+    private static JsonParser parser = new DefaultJsonParser();
     @Test
     public void test() throws Exception {
-        JsonParser parser = new DefaultJsonParser();
-        Building building = new Building(1, "No.1 Teaching Building");
-        Building building1 = new Building(2, "No.2 Teaching Building");
-        Set<Building> set = new HashSet<>();
-        set.add(building);
-        set.add(building1);
-        Bean bean = new Bean(set);
+        Map<String, Building> g = new HashMap<>();
+        int a = 100;
+        double b = 3.14;
+        String d = "Hello";
+        List<Integer> e = new ArrayList<>();
+        e.add(101);
+        Set<String> f = new HashSet<>();
+        f.add("World");
+        g.put( "11", new Building(1, "No.1 building"));
+        Bean bean = new Bean(a, b, true, d, e, f, g);
 
         String json = parser.parseToJsonString(bean);
         System.out.println(json);
-        Bean newBean = (Bean) parser.parseToObject(json, Bean.class);
-        System.out.println(newBean);
-    }
 
-    @Test
-    public void test2() {
-        Bean bean = new Bean();
-        Field field = bean.getClass().getDeclaredFields()[0];
-        Type type = field.getGenericType();
-        if (type instanceof ParameterizedType) {
-            ParameterizedType pt = (ParameterizedType) type;
-            Class<?> actualType = (Class<?>) pt.getActualTypeArguments()[0];
-            System.out.println("actual: " + actualType);
-        }
-        System.out.println(type);
+        JsonObject<String, Object> jsonObject = (JsonObject<String, Object>) parser.parseToJsonObject(json);
+        System.out.println(jsonObject);
+
+        bean = (Bean) parser.parseToObject(json, Bean.class);
+        System.out.println(bean);
     }
 
     @ToString
@@ -57,7 +50,12 @@ public class Playground {
     @AllArgsConstructor
     @NoArgsConstructor
     public static class Bean {
-        Set<Building> buildings;
-//        Building[] buildings;
+        int a;
+        double b;
+        Boolean c;
+        String d;
+        List<Integer> e;
+        Set<String> f;
+        Map<String, Building> g;
     }
 }

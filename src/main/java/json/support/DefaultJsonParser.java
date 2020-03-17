@@ -196,10 +196,10 @@ public class DefaultJsonParser extends AbstractJsonParser {
                 } else if (COLLECTION_TYPE.contains(fieldClass)) {
                     assert fieldClass != null;
                     targetField.setAccessible(true);
-                    Class<?> parameterType = getParameterType(targetField);
+                    Class<?> parameterType = getParameterType(targetField, 0);
 
                     try {
-                        if (List.class.isAssignableFrom(fieldClass)) {
+                        if (List.class.isAssignableFrom(fieldClass)) {  // List
                             List<Object> list = new ArrayList<>();
                             if (REGULAR_TYPE.contains(parameterType)) {
                                 list.addAll(jsonArray);
@@ -211,7 +211,7 @@ public class DefaultJsonParser extends AbstractJsonParser {
                                 }
                             }
                             targetField.set(targetObject, list);
-                        } else if (Set.class.isAssignableFrom(fieldClass)) {
+                        } else if (Set.class.isAssignableFrom(fieldClass)) {    // Set
                             Set<Object> set = new HashSet<>();
                             if (REGULAR_TYPE.contains(parameterType)) {
                                 set.addAll(jsonArray);
@@ -246,6 +246,36 @@ public class DefaultJsonParser extends AbstractJsonParser {
             } else if (valueClass.equals(JsonObject.class)) {
                 assert targetField != null;
                 targetField.setAccessible(true);
+
+                if (COLLECTION_TYPE.contains(fieldClass)) { // Map
+                    Map<Object, Object> map = new HashMap<>();
+                    JsonObject<String, Object> mapObj = (JsonObject<String, Object>) value;
+                    Class<?> valClass = getParameterType(targetField, 1);
+                    for (Map.Entry<String, Object> e : mapObj.entrySet()) {
+                        String mapKey = e.getKey();
+                        Object mapVal = e.getValue();
+                        Object actualKey = mapKey;
+                        Object actualVal = null;
+                        try {
+                            actualVal = valClass.getDeclaredConstructor().newInstance();
+                        } catch (Exception ex) {
+                            ex.printStackTrace();
+                        }
+                        if (REGULAR_TYPE.contains(valClass)) {
+                            actualVal = mapVal;
+                        } else {
+                            actualVal = doParseToObject((JsonObject<String, Object>) mapVal, actualVal, valClass);
+                        }
+                        map.put(actualKey, actualVal);
+                    }
+                    try {
+                        targetField.set(targetObject, map);
+                    } catch (IllegalAccessException e) {
+                        e.printStackTrace();
+                    }
+                    continue;
+                }
+
                 Object fieldObject = null;
                 try {
                     assert fieldClass != null;
@@ -646,11 +676,11 @@ public class DefaultJsonParser extends AbstractJsonParser {
      * @param field field of a collection
      * @return class of parameters of the collection
      */
-    private Class<?> getParameterType(Field field) {
+    private Class<?> getParameterType(Field field, int i) {
         Type type = field.getGenericType();
         if (type instanceof ParameterizedType) {
             ParameterizedType pt = (ParameterizedType) type;
-            return (Class<?>) pt.getActualTypeArguments()[0];
+            return (Class<?>) pt.getActualTypeArguments()[i];
         }
         return null;
     }
