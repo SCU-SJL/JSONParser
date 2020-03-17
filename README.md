@@ -28,5 +28,7 @@ null值
 使用反射技术，将 JsonObject 中的值匹配到 bean 的每个字段并赋值  
 注意此处需要 bean 拥有相应的构造器和 setter 函数
   
-### 补充
-其余的转化比较简单，甚至可以直接调用上述现有的方法进行间接转化，就不一一列举了
+### 补充说明
+该解析器能够解析各类一维数组以及嵌套的集合类，例如：List<List<Integer>>，Set<Pojo>等  
+但对于 Map 的反序列化中，限制了 Map 的 Key 只能为包装类或 String  
+以及对于反序列过程中，暂时只支持声明为接口类型的集合类，例如：private List<Integer> list，但不支持 private ArrayList<Integer> list等
